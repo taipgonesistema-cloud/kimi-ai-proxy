@@ -86,10 +86,13 @@ AUTO_TOOLS_AGENT_MODE=pc
 AUTO_TOOLS_WORKSPACE=.
 AUTO_TOOLS_MAX_STEPS=6
 AUTO_TOOLS_FAST_RETURN=true
+AUTO_TOOLS_REQUIRE_DIRECTORY_CONFIRM=true
 AUTO_TOOLS_ALLOW_COMMANDS=true
 ```
 
 Use `AUTO_TOOLS_ALLOW_COMMANDS=true` only in a trusted workspace.
+
+When `AUTO_TOOLS_REQUIRE_DIRECTORY_CONFIRM=true`, file creation/editing requests ask which directory to use unless the user already specified the current directory or a target path.
 
 `web_fetch` is only for specific URLs. Open-ended web research should use Kimi's native search, not a local `web_search` tool.
 

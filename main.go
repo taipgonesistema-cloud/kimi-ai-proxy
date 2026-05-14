@@ -156,6 +156,16 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if autoToolsEnabled() {
 		input.Tools = mergeTools(input.Tools, localTools())
 	}
+	if autoToolsEnabled() && needsDirectoryConfirmation(input.Messages) {
+		id := "chatcmpl-" + randomID()
+		content := "Qual diretorio devo usar para criar/editar arquivos? Responda `atual` para usar `" + workspaceRoot() + "`, ou envie um caminho/subdiretorio especifico."
+		if input.Stream {
+			streamCollectedOpenAI(w, id, input.Model, content, content, nil, "stop")
+			return
+		}
+		writeAssistantText(w, id, input.Model, content)
+		return
+	}
 
 	prompt := renderPrompt(input.Messages, input.Tools)
 	if autoToolsEnabled() && !input.Stream {
@@ -211,6 +221,22 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			FinishReason: &finish,
 		}},
 		Usage: estimateUsage(prompt, content),
+	})
+}
+
+func writeAssistantText(w http.ResponseWriter, id, model, content string) {
+	finish := "stop"
+	writeJSON(w, http.StatusOK, openAIResponse{
+		ID:      id,
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   model,
+		Choices: []openAIChoice{{
+			Index:        0,
+			Message:      openAIMessage{Role: "assistant", Content: content},
+			FinishReason: &finish,
+		}},
+		Usage: estimateUsage("", content),
 	})
 }
 
@@ -787,7 +813,7 @@ func renderPrompt(messages []message, tools []tool) string {
 		system = append(system, toolInstructions)
 	}
 	if requestMentionsFileCreation(messages) {
-		system = append(system, "The user's request is a file creation/editing task. Your first action must be write_file or apply_patch. Do not draft the file in chat. Do not provide a download link. Save the file on the local PC.")
+		system = append(system, "The user's request is a file creation/editing task. If the target directory is unclear, ask which directory to use before calling write_file or apply_patch. If the target directory is clear, your first action must be write_file or apply_patch. Do not draft the file in chat. Do not provide a download link. Save the file on the local PC.")
 	}
 	for _, m := range messages {
 		text := contentToText(m.Content)
@@ -1133,6 +1159,40 @@ func requestMentionsFileCreation(messages []message) bool {
 		}
 	}
 	return false
+}
+
+func needsDirectoryConfirmation(messages []message) bool {
+	if !strings.EqualFold(getenv("AUTO_TOOLS_REQUIRE_DIRECTORY_CONFIRM", "true"), "true") {
+		return false
+	}
+	latest := latestUserText(messages)
+	if latest == "" || !mentionsFileCreation(latest) {
+		return false
+	}
+	return !mentionsDirectoryChoice(latest)
+}
+
+func latestUserText(messages []message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return strings.ToLower(contentToText(messages[i].Content))
+		}
+	}
+	return ""
+}
+
+func mentionsDirectoryChoice(text string) bool {
+	phrases := []string{
+		"pasta atual", "diretorio atual", "diretório atual", "workspace atual", "diretorio corrente", "diretório corrente",
+		"current directory", "current folder", "current workspace", "nesta pasta", "nessa pasta", "aqui", "here",
+		"path:", "pasta:", "folder:", "diretorio:", "diretório:", "em ./", "em .\\", " no ./", " na ./",
+	}
+	for _, phrase := range phrases {
+		if strings.Contains(text, phrase) {
+			return true
+		}
+	}
+	return strings.Contains(text, ":\\") || strings.Contains(text, "./") || strings.Contains(text, ".\\") || strings.Contains(text, "/") || strings.Contains(text, "\\")
 }
 
 func shouldRetryWithFileTool(messages []message, content string, step, maxSteps int) bool {
