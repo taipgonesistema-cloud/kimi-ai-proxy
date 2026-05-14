@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -167,7 +168,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := callKimi(prompt, input.User, len(input.Tools) == 0)
+	resp, err := callKimi(prompt, input.User, shouldEnableKimiSearch(input.Messages, len(input.Tools) > 0))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
@@ -839,7 +840,9 @@ func formatToolsAsInstructions(tools []tool) string {
 	}
 	b.WriteString("Current local workspace root: " + workspaceRoot() + "\n")
 	b.WriteString("When the user asks you to create, save, download, write, edit, generate, or update a file, you MUST call write_file or apply_patch. Do not claim a file was created unless a tool result confirms it. Do not answer with fake links such as 'Baixe aqui'.\n")
-	b.WriteString("When the user asks you to run, test, install, build, list, search, or inspect the computer/project, you MUST use the matching local tool instead of describing what you would do.\n")
+	b.WriteString("When the user asks you to run, test, install, build, list, search, or inspect the local computer/project, you MUST use the matching local tool instead of describing what you would do.\n")
+	b.WriteString("Do not invent or call a JSON tool named web_search, search, browser_search, or internet_search. Open-ended web research is handled by Kimi's native search, not by local tools.\n")
+	b.WriteString("When the user provides a specific URL to read, use web_fetch. For current information, rankings, news, benchmarks, prices, or broad web research, rely on Kimi's native web search. Do not say internet is disabled unless the upstream Kimi request actually fails.\n")
 	b.WriteString("If a tool is needed, respond ONLY with one JSON object and no markdown. Format: {\"name\":\"tool_name\",\"arguments\":{...}}.\n")
 	b.WriteString("Available tools:\n")
 	for _, t := range tools {
@@ -993,6 +996,29 @@ func parseToolObject(v map[string]interface{}) (string, string) {
 	return name, args
 }
 
+func shouldEnableKimiSearch(messages []message, hasTools bool) bool {
+	if strings.EqualFold(getenv("KIMI_ENABLE_SEARCH_WITH_TOOLS", "true"), "false") && hasTools {
+		return false
+	}
+	if !hasTools {
+		return true
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role != "user" {
+			continue
+		}
+		text := strings.ToLower(contentToText(messages[i].Content))
+		keywords := []string{"web", "internet", "pesquisa", "pesquise", "buscar", "busca", "noticia", "noticias", "ranking", "benchmark", "preco", "preço", "atual", "hoje", "2026", "latest", "current", "news", "search"}
+		for _, keyword := range keywords {
+			if strings.Contains(text, keyword) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
 func autoToolsEnabled() bool {
 	return strings.EqualFold(os.Getenv("AUTO_TOOLS"), "true")
 }
@@ -1024,6 +1050,7 @@ func localTools() []tool {
 	return []tool{
 		{Type: "function", Function: functionTool{Name: "read_file", Description: "Read a text file from the workspace", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": stringParam("Relative file path")}, "required": []string{"path"}}}},
 		{Type: "function", Function: functionTool{Name: "write_file", Description: "Write a text file inside the workspace", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": stringParam("Relative file path"), "content": stringParam("Full file content")}, "required": []string{"path", "content"}}}},
+		{Type: "function", Function: functionTool{Name: "web_fetch", Description: "Fetch text content from a specific http or https URL provided by the user. Not for open-ended web search.", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"url": stringParam("Specific http or https URL to fetch")}, "required": []string{"url"}}}},
 		{Type: "function", Function: functionTool{Name: "list_files", Description: "List files by glob pattern inside the workspace", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pattern": stringParam("Glob pattern, for example **/*.go")}, "required": []string{"pattern"}}}},
 		{Type: "function", Function: functionTool{Name: "grep", Description: "Search file contents by regular expression", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pattern": stringParam("Regular expression"), "path": stringParam("Relative directory or file path")}, "required": []string{"pattern"}}}},
 		{Type: "function", Function: functionTool{Name: "apply_patch", Description: "Replace exact text inside a file. Arguments: path, old, new", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": stringParam("Relative file path"), "old": stringParam("Exact text to replace"), "new": stringParam("Replacement text")}, "required": []string{"path", "old", "new"}}}},
@@ -1038,7 +1065,7 @@ func runAutoToolLoop(input chatRequest, firstPrompt string) (openAIResponse, err
 	maxSteps := getenvInt("AUTO_TOOLS_MAX_STEPS", 6)
 	var lastContent string
 	for step := 0; step < maxSteps; step++ {
-		resp, err := callKimi(prompt, input.User, false)
+		resp, err := callKimi(prompt, input.User, shouldEnableKimiSearch(messages, true))
 		if err != nil {
 			return openAIResponse{}, err
 		}
@@ -1177,6 +1204,12 @@ func executeLocalTool(call toolCall) localToolResult {
 			return failTool(call.Function.Name, "write verification failed: "+err.Error())
 		}
 		return okTool(call.Function.Name, "wrote "+argString(args, "path"), "Arquivo criado: "+path, path)
+	case "web_fetch":
+		result := fetchURL(argString(args, "url"))
+		if strings.HasPrefix(result, "tool error:") {
+			return failTool(call.Function.Name, strings.TrimPrefix(result, "tool error: "))
+		}
+		return okTool(call.Function.Name, result, "URL fetched: "+argString(args, "url"), "")
 	case "list_files":
 		return okTool(call.Function.Name, listWorkspaceFiles(argString(args, "pattern")), "listed files", "")
 	case "grep":
@@ -1321,6 +1354,42 @@ func grepWorkspace(pattern, relPath string) string {
 		return nil
 	})
 	return strings.Join(lines, "\n")
+}
+
+func fetchURL(rawURL string) string {
+	if rawURL == "" {
+		return "tool error: url is required"
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Host == "" {
+		return "tool error: invalid URL"
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "tool error: only http and https URLs are allowed"
+	}
+	client := &http.Client{Timeout: 20 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return "tool error: " + err.Error()
+	}
+	req.Header.Set("User-Agent", "kimi-ai-proxy/1.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "tool error: " + err.Error()
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Sprintf("tool error: HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	if err != nil {
+		return "tool error: " + err.Error()
+	}
+	text := string(body)
+	if len(text) > 20000 {
+		text = text[:20000] + "\n... output truncated ..."
+	}
+	return text
 }
 
 func replaceInFile(relPath, oldText, newText string) string {

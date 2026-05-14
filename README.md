@@ -14,7 +14,8 @@ Model: kimi-k2.6
 - `GET /v1/models`
 - OpenAI-compatible streaming
 - Captured Kimi browser session support
-- Optional local agent tools: `read_file`, `write_file`, `list_files`, `grep`, `apply_patch`, `run_command`
+- Optional local agent tools: `read_file`, `write_file`, `web_fetch`, `list_files`, `grep`, `apply_patch`, `run_command`
+- Native Kimi search for open-ended web research
 
 ## Requirements
 
@@ -74,6 +75,7 @@ API_KEY=
 KIMI_STORAGE_STATE=storage/kimi-state.json
 KIMI_MODEL=kimi-k2.6
 KIMI_REQUEST_TIMEOUT_MS=300000
+KIMI_ENABLE_SEARCH_WITH_TOOLS=true
 ```
 
 Agent mode:
@@ -88,6 +90,8 @@ AUTO_TOOLS_ALLOW_COMMANDS=true
 ```
 
 Use `AUTO_TOOLS_ALLOW_COMMANDS=true` only in a trusted workspace.
+
+`web_fetch` is only for specific URLs. Open-ended web research should use Kimi's native search, not a local `web_search` tool.
 
 ## OpenCode
 
