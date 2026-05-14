@@ -1429,7 +1429,7 @@ func estimateUsage(prompt, completion string) usage {
 
 func withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		apiKey := os.Getenv("API_KEY")
+		apiKey := strings.TrimSpace(os.Getenv("API_KEY"))
 		if apiKey != "" {
 			expected := "Bearer " + apiKey
 			if r.Header.Get("Authorization") != expected {

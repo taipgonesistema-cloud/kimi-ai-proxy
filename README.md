@@ -4,7 +4,7 @@ Local OpenAI-compatible proxy for Kimi web.
 
 ```text
 Base URL: http://localhost:3001/v1
-API Key: local-dev-key
+API Key: optional
 Model: kimi-k2.6
 ```
 
@@ -70,7 +70,7 @@ Core settings:
 
 ```env
 PORT=3001
-API_KEY=local-dev-key
+API_KEY=
 KIMI_STORAGE_STATE=storage/kimi-state.json
 KIMI_MODEL=kimi-k2.6
 KIMI_REQUEST_TIMEOUT_MS=300000
@@ -101,7 +101,7 @@ Add this provider to `~/.config/opencode/opencode.json`:
       "name": "Kimi Local Proxy",
       "options": {
         "baseURL": "http://localhost:3001/v1",
-        "apiKey": "local-dev-key",
+        "apiKey": "optional",
         "timeout": 300000,
         "chunkTimeout": 120000
       },
@@ -130,7 +130,7 @@ Use an OpenAI-compatible provider:
 ```text
 Provider: OpenAI Compatible
 Base URL: http://localhost:3001/v1
-API Key: local-dev-key
+API Key: optional
 Model ID: kimi-k2.6
 ```
 

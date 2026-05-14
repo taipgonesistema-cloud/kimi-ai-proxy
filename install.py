@@ -106,7 +106,7 @@ def main() -> None:
 
     print("\nDone.")
     print("Base URL: http://localhost:3001/v1")
-    print("API Key: local-dev-key")
+    print("API Key: optional; set API_KEY in .env to require one")
     print("Model: kimi-k2.6")
     if not args.start:
         print("Start manually with: python install.py --no-login --start --agent")
