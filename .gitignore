@@ -1,0 +1,9 @@
+.env
+kimi-ai-proxy.exe
+kimi-ai-proxy
+*.log
+node_modules/
+.playwright/
+storage/
+__pycache__/
+*.html

@@ -1,0 +1,11 @@
+{
+  "name": "kimi-ai-proxy-session-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "session": "node scripts/save-kimi-session.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  }
+}
