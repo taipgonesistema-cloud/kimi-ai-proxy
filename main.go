@@ -153,10 +153,12 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if input.Model == "" {
 		input.Model = getenv("KIMI_MODEL", "kimi-k2.6")
 	}
-	if autoToolsEnabled() {
+	clientHasTools := len(input.Tools) > 0
+	useLocalTools := autoToolsEnabled() && !clientHasTools
+	if useLocalTools {
 		input.Tools = mergeTools(input.Tools, localTools())
 	}
-	if autoToolsEnabled() && needsDirectoryConfirmation(input.Messages) {
+	if useLocalTools && needsDirectoryConfirmation(input.Messages) {
 		id := "chatcmpl-" + randomID()
 		content := "Qual diretorio devo usar para criar/editar arquivos? Responda `atual` para usar `" + workspaceRoot() + "`, ou envie um caminho/subdiretorio especifico."
 		if input.Stream {
@@ -168,7 +170,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prompt := renderPrompt(input.Messages, input.Tools)
-	if autoToolsEnabled() && !input.Stream {
+	if useLocalTools && !input.Stream {
 		response, err := runAutoToolLoop(input, prompt)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
@@ -813,7 +815,7 @@ func renderPrompt(messages []message, tools []tool) string {
 		system = append(system, toolInstructions)
 	}
 	if requestMentionsFileCreation(messages) {
-		system = append(system, "The user's request is a file creation/editing task. If the target directory is unclear, ask which directory to use before calling write_file or apply_patch. If the target directory is clear, your first action must be write_file or apply_patch. Do not draft the file in chat. Do not provide a download link. Save the file on the local PC.")
+		system = append(system, fileTaskInstruction(tools))
 	}
 	for _, m := range messages {
 		text := contentToText(m.Content)
@@ -847,6 +849,25 @@ func renderPrompt(messages []message, tools []tool) string {
 		return strings.Join(system, "\n") + "\n\n" + strings.Join(turns, "\n\n")
 	}
 	return strings.Join(turns, "\n\n")
+}
+
+func fileTaskInstruction(tools []tool) string {
+	if hasTool(tools, "write_file") || hasTool(tools, "apply_patch") {
+		return "The user's request is a file creation/editing task. If the target directory is unclear, ask which directory to use before calling write_file or apply_patch. If the target directory is clear, your first action must be write_file or apply_patch. Do not draft the file in chat. Do not provide a download link. Save the file on the local PC."
+	}
+	if hasTool(tools, "write") || hasTool(tools, "edit") {
+		return "The user's request is a file creation/editing task. If the target directory is unclear, ask which directory to use before calling a file-writing tool. If the target directory is clear, use the available client file tool, such as write or edit. Do not invent write_file. Do not draft the file in chat. Do not provide a download link."
+	}
+	return "The user's request is a file creation/editing task. Use only the file-writing tools listed below. Do not invent unavailable tools such as write_file. Do not provide a download link."
+}
+
+func hasTool(tools []tool, name string) bool {
+	for _, t := range tools {
+		if t.Function.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func formatToolCallID(id string) string {

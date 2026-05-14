@@ -7,3 +7,4 @@ node_modules/
 storage/
 __pycache__/
 *.html
+MIMO_PROXY_NOTES.md
