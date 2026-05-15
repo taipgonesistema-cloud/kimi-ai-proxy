@@ -13,9 +13,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"kimi-ai-proxy/internal/utils"
+)
+
+var (
+	lastSuccessVariant string
+	mu                 sync.Mutex
 )
 
 func CallKimi(prompt, chatID string, enableKimiSearch bool) (io.ReadCloser, error) {
@@ -25,6 +31,19 @@ func CallKimi(prompt, chatID string, enableKimiSearch bool) (io.ReadCloser, erro
 
 	client := &http.Client{Timeout: time.Duration(utils.GetEnvInt("KIMI_REQUEST_TIMEOUT_MS", 300000)) * time.Millisecond}
 	variants := buildKimiPayloadVariants(prompt, chatID, enableKimiSearch)
+
+	// Reorder: put last successful variant first
+	mu.Lock()
+	if lastSuccessVariant != "" {
+		for i, v := range variants {
+			if v.Name == lastSuccessVariant && i > 0 {
+				variants[0], variants[i] = variants[i], variants[0]
+				break
+			}
+		}
+	}
+	mu.Unlock()
+
 	var lastErr string
 	for _, variant := range variants {
 		body, err := json.Marshal(variant.Payload)
@@ -47,14 +66,15 @@ func CallKimi(prompt, chatID string, enableKimiSearch bool) (io.ReadCloser, erro
 			b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
 			lastErr = fmt.Sprintf("%s: HTTP %d: %s", variant.Name, resp.StatusCode, strings.TrimSpace(string(b)))
+			if strings.Contains(string(b), "REASON_CHAT_CONCURRENCY_EXCEEDED") {
+				return nil, fmt.Errorf("kimi concurrency limit exceeded: %s", strings.TrimSpace(string(b)))
+			}
 			continue
 		}
-
 		buffered, err := bufferKimiResponse(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Sprintf("%s: %s", variant.Name, err.Error())
-			continue
+			return nil, err
 		}
 		if connectErr := kimiConnectError(buffered); connectErr != "" {
 			lastErr = fmt.Sprintf("%s: %s", variant.Name, connectErr)
@@ -62,6 +82,9 @@ func CallKimi(prompt, chatID string, enableKimiSearch bool) (io.ReadCloser, erro
 				continue
 			}
 		}
+		mu.Lock()
+		lastSuccessVariant = variant.Name
+		mu.Unlock()
 		return io.NopCloser(bytes.NewReader(buffered)), nil
 	}
 	return nil, fmt.Errorf("all kimi payload variants failed; last error: %s", lastErr)
