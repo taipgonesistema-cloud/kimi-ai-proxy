@@ -14,8 +14,11 @@ Model: kimi-k2.6
 - `GET /v1/models`
 - OpenAI-compatible streaming
 - Captured Kimi browser session support
+- Thinking/reasoning mode (`KIMI_THINKING=true`)
 - Optional local agent tools: `read_file`, `write_file`, `web_fetch`, `list_files`, `grep`, `apply_patch`, `run_command`
 - Native Kimi search for open-ended web research
+- XML `<tool_call>` parsing (Qwen-style fallback)
+- Schema validation for tool arguments
 
 ## Requirements
 
@@ -23,7 +26,7 @@ Model: kimi-k2.6
 - Node.js LTS
 - Python 3 on Windows via `py -3`
 
-## Install And Start
+## Quick Start
 
 ```cmd
 py -3 install.py --start --agent
@@ -35,70 +38,52 @@ Without opening the Kimi login flow again:
 py -3 install.py --no-login --start --agent
 ```
 
-The installer creates `.env` if needed, installs Node/Playwright dependencies, captures the Kimi session, and can start the proxy in the background.
-
-## Manual Flow
-
-Capture or refresh the Kimi session:
+## Manual
 
 ```cmd
-login-kimi.cmd
-```
-
-Start in agent mode:
-
-```cmd
-start-proxy.cmd
-```
-
-Start directly:
-
-```cmd
-go run ./cmd/kimi-ai-proxy
-```
-
-Health check:
-
-```cmd
-curl http://localhost:3001/health
+login-kimi.cmd                          # capture browser session
+go run ./cmd/kimi-ai-proxy              # start proxy
+curl http://localhost:3001/health       # health check
 ```
 
 ## Environment
 
-Create `.env` from `.env.example`.
-
-Core settings:
+Copy `.env.example` to `.env`:
 
 ```env
 PORT=3001
 API_KEY=
 KIMI_STORAGE_STATE=storage/kimi-state.json
 KIMI_MODEL=kimi-k2.6
-KIMI_REQUEST_TIMEOUT_MS=300000
+KIMI_THINKING=false
 KIMI_ENABLE_SEARCH_WITH_TOOLS=true
 ```
 
-Agent mode:
+Enable agent mode:
 
 ```env
 AUTO_TOOLS=true
 AUTO_TOOLS_AGENT_MODE=pc
 AUTO_TOOLS_WORKSPACE=.
-AUTO_TOOLS_MAX_STEPS=6
-AUTO_TOOLS_FAST_RETURN=true
-AUTO_TOOLS_REQUIRE_DIRECTORY_CONFIRM=true
-AUTO_TOOLS_ALLOW_COMMANDS=true
+AUTO_TOOLS_ALLOW_COMMANDS=false
 ```
 
-Use `AUTO_TOOLS_ALLOW_COMMANDS=true` only in a trusted workspace.
+## Project Structure
 
-When `AUTO_TOOLS_REQUIRE_DIRECTORY_CONFIRM=true`, file creation/editing requests ask which directory to use unless the user already specified the current directory or a target path.
-
-`web_fetch` is only for specific URLs. Open-ended web research should use Kimi's native search, not a local `web_search` tool.
+```text
+├── cmd/kimi-ai-proxy/    # Entry point
+├── internal/
+│   ├── server/           # HTTP handlers, auth, CORS
+│   ├── kimi/             # Kimi API client (Connect, stream)
+│   ├── tools/            # Tool definitions, execution, validation
+│   ├── prompt/           # Prompt rendering, refusal detection
+│   └── utils/            # Types, parsers (JSON, XML)
+├── install.py            # One-click installer
+├── login-kimi.cmd        # Browser session capture
+└── scripts/              # Playwright helpers
+```
 
 ## OpenCode
-
-Add this provider to `~/.config/opencode/opencode.json`:
 
 ```json
 {
@@ -117,22 +102,16 @@ Add this provider to `~/.config/opencode/opencode.json`:
           "name": "Kimi K2.6",
           "tool_call": true,
           "temperature": true,
-          "limit": {
-            "context": 128000,
-            "output": 8192
-          }
+          "limit": { "context": 128000, "output": 8192 }
         }
       }
     }
   },
-  "model": "kimi/kimi-k2.6",
-  "small_model": "kimi/kimi-k2.6"
+  "model": "kimi/kimi-k2.6"
 }
 ```
 
 ## Kilo Code
-
-Use an OpenAI-compatible provider:
 
 ```text
 Provider: OpenAI Compatible
@@ -140,7 +119,6 @@ Base URL: http://localhost:3001/v1
 API Key: optional
 Model ID: kimi-k2.6
 ```
-
 
 ## Notes
 
