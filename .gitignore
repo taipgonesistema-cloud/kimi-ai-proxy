@@ -1,6 +1,5 @@
 .env
-kimi-ai-proxy.exe
-kimi-ai-proxy
+*.exe
 *.log
 node_modules/
 .playwright/

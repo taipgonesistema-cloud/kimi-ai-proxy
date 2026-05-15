@@ -54,7 +54,7 @@ start-proxy.cmd
 Start directly:
 
 ```cmd
-go run .
+go run ./cmd/kimi-ai-proxy
 ```
 
 Health check:

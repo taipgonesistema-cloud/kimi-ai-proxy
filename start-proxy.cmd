@@ -12,5 +12,5 @@ set AUTO_TOOLS_FAST_RETURN=true
 set AUTO_TOOLS_ALLOW_COMMANDS=true
 set AUTO_TOOLS_WORKSPACE=%CD%
 
-start "kimi-ai-proxy" /MIN cmd /c "go run . > kimi-proxy.log 2>&1"
+start "kimi-ai-proxy" /MIN cmd /c "go run ./cmd/kimi-ai-proxy > kimi-proxy.log 2>&1"
 echo Kimi proxy iniciado em background. Log: kimi-proxy.log

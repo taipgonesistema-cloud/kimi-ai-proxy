@@ -83,7 +83,7 @@ def start_proxy(agent: bool) -> None:
             "set AUTO_TOOLS_ALLOW_COMMANDS=true&& "
             f"set AUTO_TOOLS_WORKSPACE={ROOT}&& "
         )
-    command = f'{set_agent}go run . > kimi-proxy.log 2>&1'
+    command = f'{set_agent}go run ./cmd/kimi-ai-proxy > kimi-proxy.log 2>&1'
     run(["cmd", "/c", "start", "kimi-ai-proxy", "/MIN", "cmd", "/c", command])
     print("Proxy started in background: http://localhost:3001/v1")
     print("Log file: kimi-proxy.log")
