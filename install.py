@@ -70,7 +70,7 @@ def start_proxy(agent: bool) -> None:
                     "AUTO_TOOLS_WORKSPACE": str(ROOT),
                 }
             )
-        subprocess.Popen(["go", "run", "."], cwd=ROOT, env=env)
+        subprocess.Popen(["go", "run", "./cmd/kimi-ai-proxy"], cwd=ROOT, env=env)
         print("Proxy started in background: http://localhost:3001/v1")
         return
 
