@@ -26,6 +26,14 @@ def run(command: list[str], *, check: bool = True) -> subprocess.CompletedProces
     return subprocess.run(command, cwd=ROOT, text=True, check=check)
 
 
+def _cmd(command: str, *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run a shell command via cmd.exe on Windows."""
+    print(f"\n> {command}")
+    if os.name == "nt":
+        return subprocess.run(command, cwd=ROOT, text=True, check=check, shell=True)
+    return subprocess.run(command, cwd=ROOT, text=True, check=check, shell=True)
+
+
 def need(command: str, install_hint: str) -> None:
     if shutil.which(command):
         return
@@ -48,13 +56,13 @@ def install_dependencies() -> None:
     need("go", "Install Go from https://go.dev/dl/ and reopen this terminal.")
     need("node", "Install Node.js LTS from https://nodejs.org/ and reopen this terminal.")
     need("npm", "Install Node.js LTS from https://nodejs.org/ and reopen this terminal.")
-    run(["npm", "install"])
-    run(["npx", "playwright", "install", "chromium"])
+    _cmd("npm install")
+    _cmd("npx playwright install chromium")
 
 
 def capture_session() -> None:
     print("\nA Chromium window will open. Log in to Kimi and wait until the script captures the session.")
-    run(["npm", "run", "session"])
+    _cmd("npm run session")
 
 
 def start_proxy(agent: bool) -> None:
@@ -84,7 +92,7 @@ def start_proxy(agent: bool) -> None:
             f"set AUTO_TOOLS_WORKSPACE={ROOT}&& "
         )
     command = f'{set_agent}go run ./cmd/kimi-ai-proxy > kimi-proxy.log 2>&1'
-    run(["cmd", "/c", "start", "kimi-ai-proxy", "/MIN", "cmd", "/c", command])
+    run(["cmd", "/c", "start", '"kimi-proxy"', "/MIN", "cmd", "/c", f'"{command}"'])
     print("Proxy started in background: http://localhost:3001/v1")
     print("Log file: kimi-proxy.log")
 
