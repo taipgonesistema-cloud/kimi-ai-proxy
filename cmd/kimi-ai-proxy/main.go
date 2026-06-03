@@ -14,6 +14,7 @@ func main() {
 	port := utils.GetEnv("PORT", "3001")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", server.HandleHealth)
+	mux.HandleFunc("/new", server.WithCORS(server.WithAuth(server.HandleNewChat)))
 	mux.HandleFunc("/v1/models", server.WithCORS(server.WithAuth(server.HandleModels)))
 	mux.HandleFunc("/v1/chat/completions", server.WithCORS(server.WithAuth(server.HandleChatCompletions)))
 	mux.HandleFunc("/", server.WithCORS(func(w http.ResponseWriter, r *http.Request) {

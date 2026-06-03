@@ -3,9 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "session": "node scripts/save-kimi-session.mjs"
+    "session": "node scripts/save-kimi-session.mjs",
+    "darki": "node scripts/darki-tui.mjs",
+    "darki-pipe": "node scripts/darki-pipe.mjs"
   },
   "devDependencies": {
     "playwright": "^1.57.0"
+  },
+  "dependencies": {
+    "ink": "^7.0.5",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.7"
   }
 }

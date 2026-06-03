@@ -4,6 +4,9 @@
 node_modules/
 .playwright/
 storage/
+prompts/
 __pycache__/
 *.html
 MIMO_PROXY_NOTES.md
+ola.txt
+teste-darki/

@@ -3,6 +3,8 @@ package prompt
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"kimi-ai-proxy/internal/utils"
@@ -11,6 +13,14 @@ import (
 func RenderPrompt(messages []utils.Message, tools []utils.Tool) string {
 	var system []string
 	var turns []string
+	if basePrompt := configuredSystemPrompt("KIMI_SYSTEM_PROMPT", "KIMI_SYSTEM_PROMPT_FILE", filepath.Join("prompts", "system.txt")); basePrompt != "" {
+		system = append(system, basePrompt)
+	}
+	if mentionsDarki(messages) {
+		if darkiPrompt := configuredSystemPrompt("KIMI_DARKI_SYSTEM_PROMPT", "KIMI_DARKI_SYSTEM_PROMPT_FILE", filepath.Join("prompts", "darki.txt")); darkiPrompt != "" {
+			system = append(system, darkiPrompt)
+		}
+	}
 	alreadyHasToolResult := HasToolResult(messages)
 	toolInstructions := FormatToolsAsInstructions(tools, alreadyHasToolResult)
 	if toolInstructions != "" {
@@ -57,6 +67,30 @@ func RenderPrompt(messages []utils.Message, tools []utils.Tool) string {
 		return strings.Join(system, "\n") + "\n\n" + strings.Join(turns, "\n\n")
 	}
 	return strings.Join(turns, "\n\n")
+}
+
+func configuredSystemPrompt(envKey, fileEnvKey, defaultPath string) string {
+	if value := strings.TrimSpace(os.Getenv(envKey)); value != "" {
+		return value
+	}
+	path := strings.TrimSpace(os.Getenv(fileEnvKey))
+	if path == "" {
+		path = defaultPath
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func mentionsDarki(messages []utils.Message) bool {
+	for _, m := range messages {
+		if strings.Contains(strings.ToLower(utils.ContentToText(m.Content)), "darki") {
+			return true
+		}
+	}
+	return false
 }
 
 func FormatToolsAsInstructions(tools []utils.Tool, alreadyHasToolResult bool) string {
@@ -362,7 +396,7 @@ func MentionsDirectoryChoice(text string) bool {
 }
 
 func ShouldRetryWithClientTool(messages []utils.Message, tools []utils.Tool, content string) bool {
-	if !(HasTool(tools, "write") || HasTool(tools, "edit") || HasTool(tools, "read") || HasTool(tools, "ls")) {
+	if !(HasTool(tools, "write") || HasTool(tools, "write_file") || HasTool(tools, "edit") || HasTool(tools, "apply_patch") || HasTool(tools, "read") || HasTool(tools, "read_file") || HasTool(tools, "ls") || HasTool(tools, "list_files")) {
 		return false
 	}
 	lower := strings.ToLower(content)
@@ -377,12 +411,12 @@ func ShouldRetryWithClientTool(messages []utils.Message, tools []utils.Tool, con
 
 func ClientToolRetryInstruction(tools []utils.Tool, messages []utils.Message) string {
 	lastUser := GoLastUserText(messages)
-	if HasTool(tools, "ls") && !HasTool(tools, "edit") {
+	if (HasTool(tools, "ls") || HasTool(tools, "list_files")) && !HasTool(tools, "edit") && !HasTool(tools, "apply_patch") {
 		if strings.Contains(strings.ToLower(lastUser), "acess") || strings.Contains(strings.ToLower(lastUser), "entr") || strings.Contains(strings.ToLower(lastUser), "list") || strings.Contains(strings.ToLower(lastUser), "mostr") || strings.Contains(strings.ToLower(lastUser), "ach") || strings.Contains(strings.ToLower(lastUser), "encontr") || strings.Contains(strings.ToLower(lastUser), "ver") {
 			return "Voce afirmou que um diretorio nao existe ou que esta em um container. Isso e falso. Voce esta rodando diretamente no Windows do usuario. Use ls agora para listar o diretorio solicitado. Responda apenas com o JSON da tool call."
 		}
 	}
-	if HasTool(tools, "edit") {
+	if HasTool(tools, "edit") || HasTool(tools, "apply_patch") {
 		return "You responded without using the available client file tools. This is a coding agent, not a browser chat. You do have local file access through the listed tools. If the user requested a specific edit and gave enough detail, call the available edit tool now and respond only with the JSON tool call. If the user only said to edit a file but did not say what to change, ask one short clarification question. Never say you cannot access local Windows files."
 	}
 	return "You responded without using the available client file tools. This is a coding agent, not a browser chat. You do have local file access through the listed tools. If the user requested a specific file write and gave enough detail, call the available write tool now and respond only with the JSON tool call. If the user did not say what content/change they want, ask one short clarification question. Never say you cannot access local Windows files."

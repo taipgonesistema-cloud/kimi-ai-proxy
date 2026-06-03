@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"kimi-ai-proxy/internal/kimi"
@@ -14,6 +15,36 @@ import (
 	"kimi-ai-proxy/internal/tools"
 	"kimi-ai-proxy/internal/utils"
 )
+
+var chatState = struct {
+	sync.Mutex
+	ID string
+}{}
+
+func newChatID() string {
+	id := utils.RandomID()
+	id = id[:12] + "4" + id[13:16] + "8" + id[17:]
+	return id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:]
+}
+
+func CurrentChatID() string {
+	chatState.Lock()
+	id := chatState.ID
+	chatState.Unlock()
+	return id
+}
+
+func HandleNewChat(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	chatState.Lock()
+	chatState.ID = ""
+	id := chatState.ID
+	chatState.Unlock()
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "chat_id": id, "message": "next request will let Kimi create a new chat"})
+}
 
 func HandleHealth(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -53,6 +84,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	if input.Model == "" {
 		input.Model = utils.GetEnv("KIMI_MODEL", "kimi-k2.6")
+	}
+	if input.User == "" {
+		input.User = CurrentChatID()
 	}
 
 	clientHasTools := len(input.Tools) > 0

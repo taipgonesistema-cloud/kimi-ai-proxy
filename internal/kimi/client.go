@@ -611,6 +611,7 @@ func defaultKimiChatID() string {
 
 func randomChatID() string {
 	id := utils.RandomID()
+	id = id[:12] + "4" + id[13:16] + "8" + id[17:]
 	return id[:8] + "-" + id[8:12] + "-" + id[12:16] + "-" + id[16:20] + "-" + id[20:]
 }
 
