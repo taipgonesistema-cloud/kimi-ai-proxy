@@ -76,8 +76,14 @@ Modelo: kimi-k2.6
 
 ## Instalação Rápida
 
+Windows:
 ```cmd
 setup.cmd
+```
+
+Linux / macOS:
+```bash
+chmod +x setup.sh && ./setup.sh
 ```
 
 Isso instala dependências, configura o `.env` e pergunta se quer capturar a sessão do Kimi.
@@ -85,7 +91,7 @@ Isso instala dependências, configura o `.env` e pergunta se quer capturar a ses
 Após a instalação:
 
 ```cmd
-start-proxy.cmd        # inicia o proxy
+start-proxy.cmd        # inicia o proxy (Windows)
 npm run darki          # abre o Darki TUI
 ```
 
@@ -190,10 +196,10 @@ DARKI_WORKSPACE=.                       # Diretório de trabalho (TUI/pipe)
 ├── storage/                    # Sessões e estado (gitignored)
 │   ├── kimi-state.json         # Sessão capturada do Kimi
 │   └── sessions/               # Auto-save das conversas
-├── setup.cmd                   # Instalação completa (recomendado)
+├── setup.cmd                   # Instalação (Windows)
+├── setup.sh                    # Instalação (Linux/macOS)
 ├── start-proxy.cmd             # Inicia o proxy
 ├── login-kimi.cmd              # Captura de sessão Kimi
-├── install.py                  # Instalador alternativo (Linux/macOS)
 └── package.json                # Scripts npm (darki, darki-pipe, session)
 ```
 
