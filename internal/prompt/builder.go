@@ -87,9 +87,9 @@ func FormatToolsAsInstructions(tools []utils.Tool, alreadyHasToolResult bool) st
 		return ""
 	}
 	var b strings.Builder
-	localToolSet := HasTool(tools, "write_file") || HasTool(tools, "read_file") || HasTool(tools, "run_command")
+	localToolSet := HasTool(tools, "write_file") || HasTool(tools, "read_file") || HasTool(tools, "run_command") || HasTool(tools, "apply_patch")
 	if strings.EqualFold(utils.GetEnv("AUTO_TOOLS_AGENT_MODE", "pc"), "pc") {
-		b.WriteString("You are running as an autonomous coding agent on a real Windows PC, not as a web chat bot. You can inspect and modify files in the local workspace by calling tools. You are NOT in a Linux container or /mnt/agents. You are NOT in a cloud environment. The local Windows filesystem at C:/Users/Desktop/Desktop/mimo is fully accessible through the listed tools.\n")
+		b.WriteString("You are running as an autonomous coding agent on a real Windows PC, not as a web chat bot. You can inspect and modify files in the local workspace by calling tools. You are NOT in a Linux container or /mnt/agents. You are NOT in a cloud environment. The local Windows filesystem is accessible only through the listed tools.\n")
 		b.WriteString("When the user asks to access, list, enter, or see a directory/folder, use list_files, not read_file. The read_file tool is for files only and will fail on directories.\n")
 	}
 	if localToolSet {
@@ -100,16 +100,17 @@ func FormatToolsAsInstructions(tools []utils.Tool, alreadyHasToolResult bool) st
 			b.WriteString("When the user asks you to create, save, download, write, edit, generate, or update a file, you MUST call write_file or apply_patch. Do not claim a file was created unless a tool result confirms it. Do not answer with fake links such as 'Baixe aqui'.\n")
 		}
 		b.WriteString("When the user asks you to run, test, install, build, list, search, or inspect the local computer/project, you MUST use the matching local tool instead of describing what you would do.\n")
+		b.WriteString("Prefer canonical local tool names. Common aliases are accepted by the proxy: bash -> run_command, edit -> apply_patch, read -> read_file, write -> write_file, ls -> list_files.\n")
 	} else {
 		if alreadyHasToolResult {
 			b.WriteString("A client tool result is already present in this conversation. If it completed the user's request, answer normally and do not call any more tools. Do not repeat the same write or edit call.\n")
 		} else {
-			b.WriteString("Use only the tools listed below. The client controls the workspace root; do not use the proxy server directory as the project directory. Prefer relative paths unless the user provides an absolute path. Do not invent unavailable tools such as write_file. You have real local file access through the listed client tools; never say you cannot access local Windows files or claim to be in a Linux container. You are NOT in /mnt/agents. When the user asks you to create, save, write, edit, generate, or update a file and gives enough detail, you MUST call an available client file tool such as write or edit. If the user asks to edit a file but does not say what to change, ask what exact change they want. After a successful tool result, answer normally without calling the same tool again. Do not claim a file was created unless a tool result confirms it. Do not answer with fake links such as 'Baixe aqui'.\n")
+			b.WriteString("Use only the client tools listed below. The client controls the workspace root; do not use the proxy server directory as the project directory. Prefer relative paths unless the user provides an absolute path. Do not invent unavailable tools. You have real local file access through the listed client tools; never say you cannot access local Windows files or claim to be in a Linux container. You are NOT in /mnt/agents. When the user asks you to create, save, write, edit, generate, or update a file and gives enough detail, you MUST call an available client file tool. If the user asks to edit a file but does not say what to change, ask what exact change they want. After a successful tool result, answer normally without calling the same tool again. Do not claim a file was created unless a tool result confirms it. Do not answer with fake links such as 'Baixe aqui'.\n")
 		}
 		b.WriteString("For client tool calls, output strict valid JSON only: escape newlines as \\n inside string values, never put literal line breaks inside JSON strings, and use forward slashes in Windows paths such as C:/Users/Desktop/file.html. For edit tools, use the smallest exact oldString/newString needed instead of huge repeated blocks.\n")
-		b.WriteString("When the user asks to access, list, enter, or see a directory/folder, use ls, not read. The read tool is for files only and will fail on directories.\n")
+		b.WriteString("When the user asks to access, list, enter, or see a directory/folder, use the listed directory/listing tool, not a file-read tool. File-read tools are for files only and will fail on directories.\n")
 	}
-	b.WriteString("Do not invent or call a JSON tool named web_search, search, browser_search, or internet_search. Open-ended web research is handled by Kimi's native search, not by local tools.\n")
+	b.WriteString("Do not invent tools. Use web_search only if it is explicitly listed below; otherwise open-ended web research is handled by Kimi's native search.\n")
 	if HasTool(tools, "web_fetch") {
 		b.WriteString("When the user provides a specific URL to read, use web_fetch. For current information, rankings, news, benchmarks, prices, or broad web research, rely on Kimi's native web search. Do not say internet is disabled unless the upstream Kimi request actually fails.\n")
 	} else {
@@ -202,10 +203,28 @@ func ClientToolResultFinalResponse(messages []utils.Message) (string, bool) {
 		return "", false
 	}
 	lower := strings.ToLower(text)
-	if (toolName == "write" || toolName == "edit") && (strings.Contains(lower, "successfully") || strings.Contains(lower, "sucesso") || strings.Contains(lower, "wrote") || strings.Contains(lower, "updated") || strings.Contains(lower, "criado") || strings.Contains(lower, "atualizado")) {
+	if (toolName == "write" || toolName == "edit") && !RequestNeedsClientContinuation(messages) && (strings.Contains(lower, "successfully") || strings.Contains(lower, "sucesso") || strings.Contains(lower, "wrote") || strings.Contains(lower, "updated") || strings.Contains(lower, "criado") || strings.Contains(lower, "atualizado")) {
 		return "Concluido. " + text, true
 	}
 	return "", false
+}
+
+func RequestNeedsClientContinuation(messages []utils.Message) bool {
+	latest := LatestUserText(messages)
+	if latest == "" {
+		return false
+	}
+	markers := []string{
+		"primeiro", "em seguida", "depois", "tambem", "também", "alem disso", "além disso", "por fim", "no final",
+		"confirme", "confirmar", "lendo", "leia", "alter", "acresc", "substitu", "procure", "pesquise", "busque", "registre", "verifique",
+		"then", "after", "also", "finally", "read back", "replace", "append", "search", "verify",
+	}
+	for _, marker := range markers {
+		if strings.Contains(latest, marker) {
+			return true
+		}
+	}
+	return strings.Count(latest, ".") >= 2
 }
 
 func ClientToolResultClarification(messages []utils.Message) (string, bool) {

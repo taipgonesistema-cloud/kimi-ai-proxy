@@ -141,7 +141,7 @@ async function executeTool(call) {
 async function callKimi(messages) {
   const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
     method: "POST",
-    headers: {"content-type": "application/json"},
+    headers: {"content-type": "application/json", "X-Kimi-Auto-Tools": "false"},
     body: JSON.stringify({model: MODEL, tool_choice: "auto", tools, messages}),
   });
   const text = await res.text();

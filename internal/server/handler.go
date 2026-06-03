@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -207,6 +206,7 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cleanContent, toolCalls := utils.ParseToolCalls(content)
+	content, cleanContent, toolCalls, p = normalizeOrRetryToolCalls(input, content, p)
 
 	if useLocalTools && len(toolCalls) > 0 {
 		messages := append([]utils.Message(nil), input.Messages...)
@@ -228,6 +228,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 			content = loopContent
 			cleanContent, toolCalls = utils.ParseToolCalls(content)
+			if len(toolCalls) > 0 {
+				toolCalls, _ = tools.NormalizeToolCalls(toolCalls, input.Tools)
+			}
 		}
 		if input.Stream {
 			kimi.StreamCollectedOpenAI(w, id, input.Model, p, content, nil, "stop")
@@ -260,8 +263,11 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		if path == "" {
 			path = "."
 		}
-		args := fmt.Sprintf(`{"command":"dir /s /b \"%s\""}`, strings.ReplaceAll(path, "/", "\\"))
-		tc := []utils.ToolCall{{ID: "call_" + utils.RandomID(), Type: "function", Function: utils.ToolFunction{Name: "bash", Arguments: args}}}
+		tc := directoryListingToolCall(input.Tools, path)
+		if len(tc) == 0 {
+			WriteAssistantText(w, id, input.Model, "O read falhou porque o caminho e um diretorio, mas nenhuma ferramenta de listagem esta disponivel.")
+			return
+		}
 		finish := "tool_calls"
 		if input.Stream {
 			kimi.StreamCollectedOpenAI(w, id, input.Model, "", "", tc, "tool_calls")
@@ -286,6 +292,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			if collectErr == nil {
 				content = retryContent
 				cleanContent, toolCalls = utils.ParseToolCalls(content)
+				if len(toolCalls) > 0 {
+					toolCalls, _ = tools.NormalizeToolCalls(toolCalls, input.Tools)
+				}
 				p = retryPrompt
 			}
 		}
@@ -302,6 +311,9 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			if collectErr == nil {
 				content = retryContent
 				cleanContent, toolCalls = utils.ParseToolCalls(content)
+				if len(toolCalls) > 0 {
+					toolCalls, _ = tools.NormalizeToolCalls(toolCalls, input.Tools)
+				}
 				p = retryPrompt
 			}
 		}
@@ -331,6 +343,72 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		}},
 		Usage: utils.EstimateUsage(p, content),
 	})
+}
+
+func normalizeOrRetryToolCalls(input utils.ChatRequest, content, currentPrompt string) (string, string, []utils.ToolCall, string) {
+	cleanContent, toolCalls := utils.ParseToolCalls(content)
+	if len(toolCalls) == 0 {
+		return content, cleanContent, nil, currentPrompt
+	}
+	normalized, validationErrors := tools.NormalizeToolCalls(toolCalls, input.Tools)
+	if len(validationErrors) == 0 {
+		return content, cleanContent, normalized, currentPrompt
+	}
+
+	messages := append([]utils.Message(nil), input.Messages...)
+	messages = append(messages, utils.Message{Role: "assistant", Content: content})
+	messages = append(messages, utils.Message{Role: "user", Content: tools.ToolValidationRetryInstruction(validationErrors, input.Tools)})
+	retryPrompt := prompt.RenderPrompt(messages, input.Tools)
+	retryResp, err := kimi.CallKimi(retryPrompt, input.User, utils.ShouldEnableKimiSearch(messages, len(input.Tools) > 0))
+	if err != nil {
+		message := "Tool call failed validation: " + strings.Join(validationErrors, "; ")
+		return message, message, nil, currentPrompt
+	}
+	retryContent, collectErr := kimi.CollectKimiText(retryResp)
+	retryResp.Close()
+	if collectErr != nil {
+		message := "Tool call failed validation: " + strings.Join(validationErrors, "; ")
+		return message, message, nil, currentPrompt
+	}
+	retryClean, retryCalls := utils.ParseToolCalls(retryContent)
+	normalized, validationErrors = tools.NormalizeToolCalls(retryCalls, input.Tools)
+	if len(validationErrors) > 0 {
+		message := "Tool call failed validation: " + strings.Join(validationErrors, "; ")
+		return message, message, nil, retryPrompt
+	}
+	return retryContent, retryClean, normalized, retryPrompt
+}
+
+func directoryListingToolCall(toolDefs []utils.Tool, path string) []utils.ToolCall {
+	name := ""
+	args := map[string]interface{}{}
+	switch {
+	case requestHasTool(toolDefs, "list_files"):
+		name = "list_files"
+		args["path"] = path
+	case requestHasTool(toolDefs, "ls"):
+		name = "ls"
+		args["path"] = path
+	case requestHasTool(toolDefs, "bash"):
+		name = "bash"
+		args["command"] = "dir /s /b \"" + strings.ReplaceAll(path, "/", "\\") + "\""
+	case requestHasTool(toolDefs, "run_command"):
+		name = "run_command"
+		args["command"] = "dir /s /b \"" + strings.ReplaceAll(path, "/", "\\") + "\""
+	default:
+		return nil
+	}
+	encoded, _ := json.Marshal(args)
+	return []utils.ToolCall{{ID: "call_" + utils.RandomID(), Type: "function", Function: utils.ToolFunction{Name: name, Arguments: string(encoded)}}}
+}
+
+func requestHasTool(toolDefs []utils.Tool, name string) bool {
+	for _, t := range toolDefs {
+		if t.Function.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func WriteAssistantText(w http.ResponseWriter, id, model, content string) {
