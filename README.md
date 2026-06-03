@@ -49,20 +49,27 @@ Modelo: kimi-k2.6
 
 ### Ferramentas Locais (Agent Mode)
 
-- `bash` — executa comandos no workspace
-- `read_file` — lê arquivos
-- `write_file` — escreve arquivos
-- `list_files` — lista diretórios
-- `grep` — busca conteúdo com regex
-- `web_fetch` — baixa conteúdo de URLs
-- `apply_patch` — substitui texto exato em arquivos
+| Ferramenta | Descrição |
+|------------|-----------|
+| `bash` | Executa comandos no workspace |
+| `read_file` | Lê arquivos |
+| `write_file` | Escreve arquivos |
+| `list_files` | Lista diretórios |
+| `glob` | Busca arquivos por padrão (ex: `**/*.ts`) |
+| `grep` | Busca conteúdo com regex |
+| `edit` / `apply_patch` | Substitui texto exato em arquivos |
+| `web_fetch` | Baixa conteúdo de URLs |
+| `web_search` | Pesquisa web por informações atuais |
+| `question` | Pergunta ao usuário e aguarda resposta |
+
 - Proteção de path safety (não permite sair do workspace)
+- Confirmação opcional por tool (exceto em modo YOLO)
 
 ### Prompts Condicionais
 
-- `prompts/system.txt` — injetado em toda requisição (sempre)
-- `prompts/darki.txt` — injetado apenas se a mensagem contiver `"darki"` (permite dois modos no mesmo chat)
-- `prompts/` está no `.gitignore` — prompts sensíveis nunca versionados
+- `prompts/system.txt` — identidade e personalidade do Dartik (injetado em toda requisição)
+- `prompts/darki.txt` — contrato de tool calling com todas as 11 ferramentas, regras e exemplos (injetado se a mensagem contiver `"darki"`)
+- `prompts/` é versionado no git — essencial para o funcionamento das tools
 
 ---
 
