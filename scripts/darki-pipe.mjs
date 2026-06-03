@@ -14,9 +14,12 @@ const tools = [
   {type: "function", function: {name: "read_file", description: "Read a text file from the workspace", parameters: {type: "object", properties: {path: {type: "string"}}, required: ["path"]}}},
   {type: "function", function: {name: "write_file", description: "Write a text file inside the workspace", parameters: {type: "object", properties: {path: {type: "string"}, content: {type: "string"}}, required: ["path", "content"]}}},
   {type: "function", function: {name: "list_files", description: "List files under a directory in the workspace", parameters: {type: "object", properties: {path: {type: "string"}}, required: []}}},
+  {type: "function", function: {name: "glob", description: "Find files matching a glob pattern (ex: **/*.ts, src/**/util.*)", parameters: {type: "object", properties: {pattern: {type: "string"}, path: {type: "string"}}, required: ["pattern"]}}},
   {type: "function", function: {name: "grep", description: "Search file contents by regular expression", parameters: {type: "object", properties: {pattern: {type: "string"}, path: {type: "string"}}, required: ["pattern"]}}},
+  {type: "function", function: {name: "edit", description: "Replace exact text inside a file", parameters: {type: "object", properties: {path: {type: "string"}, old: {type: "string"}, new: {type: "string"}}, required: ["path", "old", "new"]}}},
   {type: "function", function: {name: "web_fetch", description: "Fetch text content from a specific URL", parameters: {type: "object", properties: {url: {type: "string"}}, required: ["url"]}}},
-  {type: "function", function: {name: "apply_patch", description: "Replace exact text inside a file", parameters: {type: "object", properties: {path: {type: "string"}, old: {type: "string"}, new: {type: "string"}}, required: ["path", "old", "new"]}}},
+  {type: "function", function: {name: "web_search", description: "Search the web for current information", parameters: {type: "object", properties: {query: {type: "string"}}, required: ["query"]}}},
+  {type: "function", function: {name: "question", description: "Ask the user a question and wait for their answer. Use for clarifications, decisions, or gathering info.", parameters: {type: "object", properties: {question: {type: "string"}}, required: ["question"]}}},
 ];
 
 function safePath(input = ".") {
@@ -29,6 +32,11 @@ function safePath(input = ".") {
     throw new Error(`path outside workspace: ${input}`);
   }
   return full;
+}
+
+function globToRegex(pattern) {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  return new RegExp("^" + escaped + "$", "i");
 }
 
 async function walk(dir, limit = 300) {
@@ -67,6 +75,12 @@ async function executeTool(call) {
       return `wrote ${args.path}`;
     }
     if (name === "list_files") return await walk(safePath(args.path || "."));
+    if (name === "glob") {
+      const dir = safePath(args.path || ".");
+      const re = globToRegex(args.pattern);
+      const all = (await walk(dir, 500)).split("\n").filter(Boolean);
+      return all.filter((f) => re.test(f)).join("\n") || "no matches";
+    }
     if (name === "grep") {
       const dir = safePath(args.path || ".");
       const pattern = new RegExp(String(args.pattern), "i");
@@ -87,12 +101,33 @@ async function executeTool(call) {
       const res = await fetch(args.url);
       return (await res.text()).slice(0, 20000);
     }
-    if (name === "apply_patch") {
+    if (name === "web_search") {
+      const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1&skip_disambig=1`);
+      const data = await res.json();
+      const results = [];
+      if (data.AbstractText) results.push(data.AbstractText);
+      if (data.Results) data.Results.slice(0, 8).forEach((r) => { if (r.Text) results.push(r.Text); });
+      return results.join("\n") || "no results";
+    }
+    if (name === "edit" || name === "apply_patch") {
       const target = safePath(args.path);
       const text = await readFile(target, "utf8");
       if (!text.includes(args.old)) throw new Error("old text not found");
       await writeFile(target, text.replace(args.old, args.new));
       return `patched ${args.path}`;
+    }
+    if (name === "question") {
+      process.stderr.write(`\n\x1b[36m❓ ${args.question || "?"}\x1b[0m\n\x1b[33mResposta: \x1b[0m`);
+      return new Promise((resolve) => {
+        const wasRaw = process.stdin.isRaw;
+        if (wasRaw) process.stdin.setRawMode(false);
+        process.stdin.once("data", (buffer) => {
+          const answer = buffer.toString().trim();
+          if (wasRaw) process.stdin.setRawMode(true);
+          process.stderr.write("\x1b[32m✓ answer captured\x1b[0m\n");
+          resolve(answer || "no answer");
+        });
+      });
     }
     return `tool error: unknown tool ${name}`;
   } catch (error) {

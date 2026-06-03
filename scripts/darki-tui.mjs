@@ -61,9 +61,12 @@ const tools = [
   {type: "function", function: {name: "read_file", description: "Read a text file from the workspace", parameters: {type: "object", properties: {path: {type: "string"}}, required: ["path"]}}},
   {type: "function", function: {name: "write_file", description: "Write a text file inside the workspace", parameters: {type: "object", properties: {path: {type: "string"}, content: {type: "string"}}, required: ["path", "content"]}}},
   {type: "function", function: {name: "list_files", description: "List files under a directory in the workspace", parameters: {type: "object", properties: {path: {type: "string"}}, required: []}}},
+  {type: "function", function: {name: "glob", description: "Find files matching a glob pattern (ex: **/*.ts, src/**/util.*)", parameters: {type: "object", properties: {pattern: {type: "string"}, path: {type: "string"}}, required: ["pattern"]}}},
   {type: "function", function: {name: "grep", description: "Search file contents by regular expression", parameters: {type: "object", properties: {pattern: {type: "string"}, path: {type: "string"}}, required: ["pattern"]}}},
+  {type: "function", function: {name: "edit", description: "Replace exact text inside a file", parameters: {type: "object", properties: {path: {type: "string"}, old: {type: "string"}, new: {type: "string"}}, required: ["path", "old", "new"]}}},
   {type: "function", function: {name: "web_fetch", description: "Fetch text content from a specific URL", parameters: {type: "object", properties: {url: {type: "string"}}, required: ["url"]}}},
-  {type: "function", function: {name: "apply_patch", description: "Replace exact text inside a file", parameters: {type: "object", properties: {path: {type: "string"}, old: {type: "string"}, new: {type: "string"}}, required: ["path", "old", "new"]}}},
+  {type: "function", function: {name: "web_search", description: "Search the web for current information", parameters: {type: "object", properties: {query: {type: "string"}}, required: ["query"]}}},
+  {type: "function", function: {name: "question", description: "Ask the user a question and wait for their answer. Use for clarifications, decisions, or gathering info.", parameters: {type: "object", properties: {question: {type: "string"}}, required: ["question"]}}},
 ];
 
 function safePath(input = ".") {
@@ -95,6 +98,11 @@ async function walk(dir, limit = 300) {
   return out.join("\n");
 }
 
+function globToRegex(pattern) {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
+  return new RegExp("^" + escaped + "$", "i");
+}
+
 async function executeTool(call) {
   const name = call?.function?.name;
   let args = call?.function?.arguments || "{}";
@@ -114,6 +122,12 @@ async function executeTool(call) {
       return `wrote ${args.path}`;
     }
     if (name === "list_files") return await walk(safePath(args.path || "."));
+    if (name === "glob") {
+      const dir = safePath(args.path || ".");
+      const re = globToRegex(args.pattern);
+      const all = (await walk(dir, 500)).split("\n").filter(Boolean);
+      return all.filter((f) => re.test(f)).join("\n") || "no matches";
+    }
     if (name === "grep") {
       const dir = safePath(args.path || ".");
       const pattern = new RegExp(String(args.pattern), "i");
@@ -130,17 +144,26 @@ async function executeTool(call) {
       }
       return hits.join("\n") || "no matches";
     }
-    if (name === "web_fetch") {
-      const res = await fetch(args.url);
-      return (await res.text()).slice(0, 20000);
-    }
-    if (name === "apply_patch") {
+    if (name === "edit" || name === "apply_patch") {
       const target = safePath(args.path);
       const text = await readFile(target, "utf8");
       if (!text.includes(args.old)) throw new Error("old text not found");
       await writeFile(target, text.replace(args.old, args.new));
       return `patched ${args.path}`;
     }
+    if (name === "web_fetch") {
+      const res = await fetch(args.url);
+      return (await res.text()).slice(0, 20000);
+    }
+    if (name === "web_search") {
+      const res = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(args.query)}&format=json&no_html=1&skip_disambig=1`);
+      const data = await res.json();
+      const results = [];
+      if (data.AbstractText) results.push(data.AbstractText);
+      if (data.Results) data.Results.slice(0, 8).forEach((r) => { if (r.Text) results.push(r.Text); });
+      return results.join("\n") || "no results";
+    }
+    if (name === "question") return "(answer will be collected from user)";
     return `tool error: unknown tool ${name}`;
   } catch (error) {
     return `tool error: ${error.message}`;
@@ -214,6 +237,7 @@ function App() {
   const [tick, setTick] = useState(0);
   const [yolo, setYolo] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [questioning, setQuestioning] = useState(null);
   const msgRef = useRef([]);
   const itemsRef = useRef([{role: "system", text: "Darki TUI ready. /new /yolo /exit"}]);
   const [displayItems, setDisplayItems] = useState(itemsRef.current);
@@ -226,7 +250,7 @@ function App() {
 
   const matches = getMatches(input);
   const shadow = bestMatch(input);
-  const showCommands = input.startsWith("/") && !confirming;
+  const showCommands = input.startsWith("/") && !confirming && !questioning;
 
   const flush = useCallback(() => {
     if (storeRef.current.items.length > 0) {
@@ -249,7 +273,7 @@ function App() {
   }, [busy]);
 
   useInput((_input, key) => {
-    if (!key.tab || busy || confirming || !input.startsWith("/")) return;
+    if (!key.tab || busy || confirming || questioning || !input.startsWith("/")) return;
     const complete = bestMatch(inputRef.current);
     if (complete) { setInput(complete + " "); }
   });
@@ -335,6 +359,23 @@ function App() {
           const argsPreview = (typeof call.function?.arguments === "string" ? call.function.arguments : JSON.stringify(call.function?.arguments || {})).slice(0, 600);
           batch.push({role: "tool-call", text: `${name} ${argsPreview}`});
 
+          if (name === "question") {
+            const q = (typeof call.function?.arguments === "string" ? JSON.parse(call.function?.arguments || "{}") : call.function?.arguments || {}).question || "?";
+            storeRef.current.items = [...batch, {role: "tool-call", text: `❓ ${q}`}];
+            flush();
+            setQuestioning(q);
+            const userAnswer = await new Promise((resolve) => { confirmResolve.current = resolve; });
+            setQuestioning(null);
+            if (userAnswer === null) {
+              nextMessages = [...nextMessages, {role: "tool", tool_call_id: call.id, content: "user dismissed the question"}];
+              batch.push({role: "tool", text: "⨯ user dismissed"});
+              continue;
+            }
+            nextMessages = [...nextMessages, {role: "tool", tool_call_id: call.id, content: userAnswer}];
+            batch.push({role: "tool", text: `→ ${userAnswer.slice(0, 600)}`});
+            continue;
+          }
+
           if (!yoloRef.current) {
             storeRef.current.items = batch;
             flush();
@@ -366,6 +407,16 @@ function App() {
     }
   }
 
+  function handlePrompt(value) {
+    if (questioning) {
+      confirmResolve.current?.(value || null);
+      setInput("");
+      inputRef.current = "";
+      return;
+    }
+    handleConfirm(value);
+  }
+
   function handleConfirm(key) {
     if (key === "y" || key === "Y" || key === "") confirmResolve.current?.(true);
     else if (key === "a" || key === "A") { yoloRef.current = true; setYolo(true); confirmResolve.current?.(true); }
@@ -395,16 +446,22 @@ function App() {
         h(Text, {color: "#FFD166", bold: true}, ` ⚠ ${confirming.name}`),
         h(Text, {color: "#8A8F98"}, `  ${truncate(confirming.args, innerWidth - 2)}`),
         h(Text, {color: "#7CFF9B"}, `  [Y]es  [N]o  [A]llow always (YOLO)`),
+      ) : null,
+      questioning ? h(Box, {marginTop: 1, flexDirection: "column"},
+        h(Text, {color: "#67E8F9", bold: true}, ` ❓ ${truncate(questioning, innerWidth - 2)}`),
+        h(Text, {color: "#7CFF9B"}, `  Digite sua resposta e pressione Enter`),
       ) : null
     ),
 
     h(Box, {flexDirection: "column", marginTop: 1},
       h(Box, {borderStyle: "round", borderColor: busy ? "#555" : yolo ? "#FF5C7A" : "#67E8F9", paddingX: 1, flexDirection: "column"},
         h(Box, {},
-          h(Text, {color: busy ? "#FFD166" : yolo ? "#FF5C7A" : "#67E8F9", bold: true}, confirming ? "? " : busy ? `${frames[tick % frames.length]} ` : "› "),
-          confirming
-            ? h(TextInput, {value: input, onChange: handleChange, onSubmit: (v) => { handleConfirm(v.trim()); setInput(""); inputRef.current = ""; }, placeholder: "Run tool? (Y/n/a)"})
-            : h(TextInput, {value: input, onChange: handleChange, onSubmit: submit, placeholder: busy ? "Darki is working…" : "Ask Darki…"})
+          h(Text, {color: busy ? "#FFD166" : yolo ? "#FF5C7A" : "#67E8F9", bold: true}, questioning ? "✎ " : confirming ? "? " : busy ? `${frames[tick % frames.length]} ` : "› "),
+          questioning
+            ? h(TextInput, {value: input, onChange: handleChange, onSubmit: (v) => { handlePrompt(v.trim()); }, placeholder: "Sua resposta…"})
+            : confirming
+              ? h(TextInput, {value: input, onChange: handleChange, onSubmit: (v) => { handlePrompt(v.trim()); }, placeholder: "Run tool? (Y/n/a)"})
+              : h(TextInput, {value: input, onChange: handleChange, onSubmit: submit, placeholder: busy ? "Darki is working…" : "Ask Darki…"})
         ),
         showCommands && !confirming
           ? h(Box, {marginTop: 1, flexDirection: "column", borderStyle: "round", borderColor: "#555", paddingX: 1},
