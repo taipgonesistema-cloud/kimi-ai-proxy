@@ -4,7 +4,7 @@
 node_modules/
 .playwright/
 storage/
-prompts/
+# prompts/ is tracked — contains system.txt and darki.txt
 __pycache__/
 *.html
 MIMO_PROXY_NOTES.md
