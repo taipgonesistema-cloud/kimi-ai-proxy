@@ -21,7 +21,7 @@ Modelo: kimi-k2.6
 - Retry automático quando o modelo ignora ferramentas
 - Modo **thinking/reasoning** (`KIMI_THINKING=true`)
 - Pesquisa web nativa do Kimi para pesquisas abertas
-- Fallback XML `<tool_call>` (estilo Qwen)
+
 - Validação de schema para argumentos de ferramentas
 
 ### Darki TUI (Interface Terminal)
