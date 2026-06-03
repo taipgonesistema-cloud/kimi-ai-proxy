@@ -70,7 +70,6 @@ Modelo: kimi-k2.6
 
 - Go
 - Node.js LTS
-- Python 3 (Windows via `py -3`)
 - Chrome (para captura de sessão)
 
 ---
@@ -78,34 +77,29 @@ Modelo: kimi-k2.6
 ## Instalação Rápida
 
 ```cmd
-py -3 install.py --start --agent
+setup.cmd
 ```
 
-Para pular o login do Kimi (se já tiver sessão salva):
+Isso instala dependências, configura o `.env` e pergunta se quer capturar a sessão do Kimi.
+
+Após a instalação:
 
 ```cmd
-py -3 install.py --no-login --start --agent
+start-proxy.cmd        # inicia o proxy
+npm run darki          # abre o Darki TUI
 ```
 
 ---
 
-## Uso Manual
+## Uso
 
-### 1. Capturar Sessão do Kimi
+### Iniciar o Proxy
 
 ```cmd
-login-kimi.cmd
+start-proxy.cmd
 ```
 
 Ou manualmente:
-
-```cmd
-npm run session
-```
-
-Isso abre o Chrome, limpa cookies/storage, e espera você fazer login. Pressione Enter no terminal após o login.
-
-### 2. Iniciar o Proxy
 
 ```cmd
 go run ./cmd/kimi-ai-proxy
@@ -113,22 +107,28 @@ go run ./cmd/kimi-ai-proxy
 
 O proxy sobe em `http://127.0.0.1:3001`.
 
-### 3. Usar o Darki TUI
+### Capturar Sessão do Kimi (primeira vez)
+
+```cmd
+login-kimi.cmd
+```
+
+Abre o Chrome, limpa cookies/storage, e espera você fazer login no Kimi. Pressione Enter no terminal após o login.
+
+### Darki TUI (Interface Interativa)
 
 ```cmd
 npm run darki
 ```
 
-Interface interativa com comandos:
-
 | Comando | Descrição |
 |---------|-----------|
 | `/new` | Limpa o chat e cria nova sessão |
-| `/yolo` | Ativa/desativa YOLO mode |
-| `/session` | Lista sessões salvas (auto-save) |
+| `/yolo` | Ativa/desativa YOLO mode (tools sem confirmação) |
+| `/session` | Lista sessões salvas (auto-save automático) |
 | `/exit` | Sai do Darki TUI |
 
-### 4. Usar o Modo Pipe
+### Modo Pipe (para Scripts / IAs)
 
 ```cmd
 npm run darki-pipe -- -p "fala darki, qual é o seu nome?"
@@ -190,8 +190,10 @@ DARKI_WORKSPACE=.                       # Diretório de trabalho (TUI/pipe)
 ├── storage/                    # Sessões e estado (gitignored)
 │   ├── kimi-state.json         # Sessão capturada do Kimi
 │   └── sessions/               # Auto-save das conversas
-├── install.py                  # Instalador one-click
-├── login-kimi.cmd              # Atalho para captura de sessão
+├── setup.cmd                   # Instalação completa (recomendado)
+├── start-proxy.cmd             # Inicia o proxy
+├── login-kimi.cmd              # Captura de sessão Kimi
+├── install.py                  # Instalador alternativo (Linux/macOS)
 └── package.json                # Scripts npm (darki, darki-pipe, session)
 ```
 
