@@ -253,7 +253,7 @@ Model ID: kimi-k2.6
 
 ## Observações
 
-- Este proxy usa os **internos da web do Kimi**, não a API oficial da Moonshot.
-- Pode quebrar quando o Kimi atualizar o site, a sessão expirar ou o Cloudflare bloquear.
-- `prompts/` e `storage/` estão no `.gitignore` — dados sensíveis nunca vão para o repositório.
+- Este proxy usa os **internos da web do Kimi**, não a API oficial da Moonshot. Pode quebrar quando o Kimi atualizar o site, a sessão expirar ou o Cloudflare bloquear.
+- `prompts/` e `storage/` estão versionados — dados sensíveis nunca vão para o repositório.
 - O modo pipe (`-p`) é ideal para integrar o Darki em scripts, automações e interações com outras IAs.
+- **Importante:** O Kimi com prompt injection (system.txt + darki.txt) funciona apenas com `KIMI_THINKING=false` atualmente. O modo thinking (`KIMI_THINKING=true`) ignora os prompts de sistema injetados.
