@@ -92,26 +92,16 @@ func CallKimi(prompt, chatID string, enableKimiSearch bool) (io.ReadCloser, erro
 
 func buildKimiPayloadVariants(prompt, chatID string, enableKimiSearch bool) []utils.KimiPayloadVariant {
 	baseScenario := utils.GetEnvInt("KIMI_SCENARIO", 9)
-	scenarios := []int{baseScenario}
-	if baseScenario != 5 {
-		scenarios = append(scenarios, 5)
-	}
+	isThinking := strings.EqualFold(utils.GetEnv("KIMI_THINKING", "false"), "true")
 	variants := []utils.KimiPayloadVariant{
 		{Name: "browser-exact", Payload: buildBrowserExactPayload(prompt, chatID, enableKimiSearch)},
+		{Name: fmt.Sprintf("minimal-s%d", baseScenario), Payload: buildMinimalKimiPayload(prompt, chatID, baseScenario, false, false, false, isThinking)},
+		{Name: fmt.Sprintf("standard-s%d", baseScenario), Payload: buildKimiPayload(prompt, chatID, baseScenario, false, false, false, isThinking)},
 	}
-	isThinking := strings.EqualFold(utils.GetEnv("KIMI_THINKING", "false"), "true")
-	for _, scenario := range scenarios {
+	if baseScenario != 5 {
 		variants = append(variants,
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-snake-text-num-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, true, false, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-camel-text-num-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, false, false, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-snake-content-num-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, true, true, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-camel-content-num-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, false, true, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-snake-text-role-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, true, false, true, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-camel-text-role-s%d", scenario), Payload: buildMinimalKimiPayload(prompt, chatID, scenario, false, false, true, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("snake-text-s%d", scenario), Payload: buildKimiPayload(prompt, chatID, scenario, true, false, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("camel-text-s%d", scenario), Payload: buildKimiPayload(prompt, chatID, scenario, false, false, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("camel-content-s%d", scenario), Payload: buildKimiPayload(prompt, chatID, scenario, false, true, false, isThinking)},
-			utils.KimiPayloadVariant{Name: fmt.Sprintf("snake-content-s%d", scenario), Payload: buildKimiPayload(prompt, chatID, scenario, true, false, false, isThinking)},
+			utils.KimiPayloadVariant{Name: fmt.Sprintf("minimal-s%d", 5), Payload: buildMinimalKimiPayload(prompt, chatID, 5, false, false, false, isThinking)},
+			utils.KimiPayloadVariant{Name: fmt.Sprintf("standard-s%d", 5), Payload: buildKimiPayload(prompt, chatID, 5, false, false, false, isThinking)},
 		)
 	}
 	if strings.EqualFold(utils.GetEnv("KIMI_TYPE_NAME", "false"), "true") {

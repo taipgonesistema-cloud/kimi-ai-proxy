@@ -16,6 +16,7 @@ Modelo: kimi-k2.6
 
 - `POST /v1/chat/completions` — streaming e não-streaming
 - `GET /v1/models` — lista modelos disponíveis
+- `POST /v1/clear-chats` — deleta todas as conversas do Kimi via Browser Bridge
 - `POST /new` — limpa a sessão atual e cria uma nova conversa no Kimi
 - Tool calling no formato OpenAI SDK (`tool_calls` com `type: "function"`)
 - Retry automático quando o modelo ignora ferramentas
@@ -61,14 +62,15 @@ Modelo: kimi-k2.6
 | `web_fetch` | Baixa conteúdo de URLs |
 | `web_search` | Pesquisa web por informações atuais |
 | `question` | Pergunta ao usuário e aguarda resposta |
+| `clear_chats` | Deleta todas as conversas do Kimi via Playwright (útil quando bate o limite de concorrência) |
 
 - Proteção de path safety (não permite sair do workspace)
 - Confirmação opcional por tool (exceto em modo YOLO)
 
-### Prompts Condicionais
+### Prompts (sempre injetados)
 
 - `prompts/system.txt` — identidade e personalidade do Dartik (injetado em toda requisição)
-- `prompts/darki.txt` — contrato de tool calling com todas as 11 ferramentas, regras e exemplos (injetado se a mensagem contiver `"darki"`)
+- `prompts/darki.txt` — contrato de tool calling com todas as 12 ferramentas, regras e exemplos (sempre injetado — não depende da mensagem conter `"darki"`)
 - `prompts/` é versionado no git — essencial para o funcionamento das tools
 
 ---
@@ -196,6 +198,7 @@ DARKI_WORKSPACE=.                       # Diretório de trabalho (TUI/pipe)
 ├── scripts/
 │   ├── darki-tui.mjs           # Darki TUI (Ink + React) — interface interativa
 │   ├── darki-pipe.mjs          # Darki modo pipe — CLI programática
+│   ├── clear-kimi-chats.mjs    # Limpeza de chats via Browser Bridge (relay)
 │   └── save-kimi-session.mjs   # Captura de sessão Playwright
 ├── prompts/                    # System prompts (gitignored)
 │   ├── system.txt              # Prompt principal (sempre injetado)
@@ -257,3 +260,4 @@ Model ID: kimi-k2.6
 - `prompts/` e `storage/` estão versionados — dados sensíveis nunca vão para o repositório.
 - O modo pipe (`-p`) é ideal para integrar o Darki em scripts, automações e interações com outras IAs.
 - **Importante:** O Kimi com prompt injection (system.txt + darki.txt) funciona apenas com `KIMI_THINKING=false` atualmente. O modo thinking (`KIMI_THINKING=true`) ignora os prompts de sistema injetados.
+- O Kimi tem um **limite de concorrência** (muitos chats abertos). Quando detectado (`REASON_CHAT_CONCURRENCY_EXCEEDED`), o proxy retorna automaticamente uma `tool_calls` com `clear_chats` em vez de erro HTTP. A TUI/pipe executa a limpeza via Playwright e você pode tentar novamente.

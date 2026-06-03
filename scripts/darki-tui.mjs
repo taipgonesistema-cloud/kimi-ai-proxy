@@ -70,12 +70,9 @@ const tools = [
 ];
 
 function safePath(input = ".") {
-  const normalized = String(input || ".").replaceAll("\\", "/");
-  if (path.isAbsolute(normalized) || normalized.split("/").includes("..")) {
-    throw new Error(`unsafe path: ${input}`);
-  }
-  const full = path.resolve(ROOT, normalized);
-  if (full !== path.resolve(ROOT) && !full.startsWith(path.resolve(ROOT) + path.sep)) {
+  const full = path.resolve(ROOT, String(input || "."));
+  const rootResolved = path.resolve(ROOT);
+  if (full !== rootResolved && !full.startsWith(rootResolved + path.sep)) {
     throw new Error(`path outside workspace: ${input}`);
   }
   return full;
@@ -163,6 +160,12 @@ async function executeTool(call) {
       if (data.Results) data.Results.slice(0, 8).forEach((r) => { if (r.Text) results.push(r.Text); });
       return results.join("\n") || "no results";
     }
+    if (name === "clear_chats") {
+      const res = await fetch(`${BASE_URL}/v1/clear-chats`, {method:"POST", headers:{"content-type":"application/json"}, body:"{}"});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || res.statusText);
+      return "all chats cleared";
+    }
     if (name === "question") return "(answer will be collected from user)";
     return `tool error: unknown tool ${name}`;
   } catch (error) {
@@ -235,7 +238,7 @@ function App() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
-  const [yolo, setYolo] = useState(false);
+  const [yolo, setYolo] = useState(true);
   const [confirming, setConfirming] = useState(null);
   const [questioning, setQuestioning] = useState(null);
   const msgRef = useRef([]);
@@ -243,7 +246,7 @@ function App() {
   const [displayItems, setDisplayItems] = useState(itemsRef.current);
   const [msgCount, setMsgCount] = useState(0);
   const confirmResolve = useRef(null);
-  const yoloRef = useRef(false);
+  const yoloRef = useRef(true);
   const inputRef = useRef("");
   const storeRef = useRef({messages: [], items: []});
   const sessionIdRef = useRef(Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
@@ -348,7 +351,6 @@ function App() {
           storeRef.current.messages = nextMessages;
           storeRef.current.items = [{role: "assistant", text: content || "(empty)"}];
           flush();
-          autoSave(sessionIdRef.current, nextMessages);
           break;
         }
 
@@ -396,7 +398,6 @@ function App() {
         storeRef.current.messages = nextMessages;
         storeRef.current.items = batch;
         flush();
-        autoSave(sessionIdRef.current, nextMessages);
       }
     } catch (error) {
       storeRef.current.items = [{role: "error", text: error.message}];

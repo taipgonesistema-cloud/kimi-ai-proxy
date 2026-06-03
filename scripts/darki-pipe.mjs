@@ -23,12 +23,9 @@ const tools = [
 ];
 
 function safePath(input = ".") {
-  const normalized = String(input || ".").replaceAll("\\", "/");
-  if (path.isAbsolute(normalized) || normalized.split("/").includes("..")) {
-    throw new Error(`unsafe path: ${input}`);
-  }
-  const full = path.resolve(ROOT, normalized);
-  if (full !== path.resolve(ROOT) && !full.startsWith(path.resolve(ROOT) + path.sep)) {
+  const full = path.resolve(ROOT, String(input || "."));
+  const rootResolved = path.resolve(ROOT);
+  if (full !== rootResolved && !full.startsWith(rootResolved + path.sep)) {
     throw new Error(`path outside workspace: ${input}`);
   }
   return full;
@@ -115,6 +112,12 @@ async function executeTool(call) {
       if (!text.includes(args.old)) throw new Error("old text not found");
       await writeFile(target, text.replace(args.old, args.new));
       return `patched ${args.path}`;
+    }
+    if (name === "clear_chats") {
+      const res = await fetch(`${BASE_URL}/v1/clear-chats`, {method:"POST", headers:{"content-type":"application/json"}, body:"{}"});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || res.statusText);
+      return "all chats cleared";
     }
     if (name === "question") {
       process.stderr.write(`\n\x1b[36m❓ ${args.question || "?"}\x1b[0m\n\x1b[33mResposta: \x1b[0m`);
@@ -232,7 +235,7 @@ async function main() {
 
     if (toolCalls.length === 0) {
       messages = [...messages, {role: "assistant", content: choice.content || ""}];
-      autoSave(sessionId, messages);
+      await autoSave(sessionId, messages);
       process.stdout.write(choice.content || "");
       process.exit(0);
     }

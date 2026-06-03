@@ -32,6 +32,7 @@ func LocalTools() []utils.Tool {
 		{Type: "function", Function: utils.FunctionTool{Name: "grep", Description: "Search file contents by regular expression", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pattern": stringParam("Regular expression"), "path": stringParam("Relative directory or file path")}, "required": []string{"pattern"}}}},
 		{Type: "function", Function: utils.FunctionTool{Name: "apply_patch", Description: "Replace exact text inside a file. Arguments: path, old, new", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": stringParam("Relative file path"), "old": stringParam("Exact text to replace"), "new": stringParam("Replacement text")}, "required": []string{"path", "old", "new"}}}},
 		{Type: "function", Function: utils.FunctionTool{Name: "run_command", Description: "Run a non-interactive cmd.exe command in the workspace. Use only for build/test/install/status commands.", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{"command": stringParam("Command to run"), "timeout_ms": map[string]interface{}{"type": "integer", "description": "Timeout in milliseconds, max 120000"}}, "required": []string{"command"}}}},
+		{Type: "function", Function: utils.FunctionTool{Name: "clear_chats", Description: "Delete all Kimi chat sessions to free up concurrency slots. Call this when Kimi returns a concurrency limit error.", Parameters: map[string]interface{}{"type": "object", "properties": map[string]interface{}{}, "required": []string{}}}},
 	}
 }
 
@@ -99,6 +100,14 @@ func ExecuteLocalTool(call utils.ToolCall) utils.LocalToolResult {
 			summary += "\n" + strings.TrimSpace(result)
 		}
 		return okTool(call.Function.Name, result, summary, "")
+	case "clear_chats":
+		cmd := exec.Command("node", "scripts/clear-kimi-chats.mjs")
+		cmd.Dir = utils.WorkspaceRoot()
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return failTool(call.Function.Name, string(output)+": "+err.Error())
+		}
+		return okTool(call.Function.Name, string(output), "Chats limpos com sucesso", "")
 	default:
 		return failTool(call.Function.Name, "unknown local tool "+call.Function.Name)
 	}

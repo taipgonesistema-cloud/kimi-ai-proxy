@@ -17,6 +17,7 @@ func main() {
 	mux.HandleFunc("/new", server.WithCORS(server.WithAuth(server.HandleNewChat)))
 	mux.HandleFunc("/v1/models", server.WithCORS(server.WithAuth(server.HandleModels)))
 	mux.HandleFunc("/v1/chat/completions", server.WithCORS(server.WithAuth(server.HandleChatCompletions)))
+	mux.HandleFunc("/v1/clear-chats", server.WithCORS(server.WithAuth(server.HandleClearChats)))
 	mux.HandleFunc("/", server.WithCORS(func(w http.ResponseWriter, r *http.Request) {
 		server.WriteJSON(w, http.StatusOK, map[string]string{"name": "kimi-ai-proxy", "status": "ok"})
 	}))

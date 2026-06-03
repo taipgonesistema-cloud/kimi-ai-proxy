@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,45 @@ func HandleNewChat(w http.ResponseWriter, r *http.Request) {
 
 func HandleHealth(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func writeClearChatsResponse(w http.ResponseWriter, model string) {
+	id := "chatcmpl-" + utils.RandomID()
+	finish := "tool_calls"
+	args := "{}"
+	tc := []utils.ToolCall{{
+		ID:       "call_" + utils.RandomID(),
+		Type:     "function",
+		Function: utils.ToolFunction{Name: "clear_chats", Arguments: args},
+	}}
+	WriteJSON(w, http.StatusOK, utils.OpenAIResponse{
+		ID: id, Object: "chat.completion", Created: time.Now().Unix(), Model: model,
+		Choices: []utils.OpenAIChoice{{
+			Index: 0,
+			Message: utils.OpenAIMessage{
+				Role:      "assistant",
+				Content:   "Kimi chat limit reached. Call clear_chats to delete all old chats and retry.",
+				ToolCalls: tc,
+			},
+			FinishReason: &finish,
+		}},
+		Usage: utils.EstimateUsage("", ""),
+	})
+}
+
+func HandleClearChats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	cmd := exec.Command("node", "scripts/clear-kimi-chats.mjs")
+	cmd.Dir = utils.WorkspaceRoot()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "failed to clear chats: "+err.Error()+": "+string(output))
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "chats cleared"})
 }
 
 func HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +172,10 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if useLocalTools && !input.Stream {
 		response, err := tools.RunAutoToolLoop(input, p)
 		if err != nil {
+			if strings.Contains(err.Error(), "concurrency limit") {
+				writeClearChatsResponse(w, input.Model)
+				return
+			}
 			WriteError(w, http.StatusBadGateway, err.Error())
 			return
 		}
@@ -141,6 +185,10 @@ func HandleChatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := kimi.CallKimi(p, input.User, utils.ShouldEnableKimiSearch(input.Messages, len(input.Tools) > 0))
 	if err != nil {
+		if strings.Contains(err.Error(), "concurrency limit") {
+			writeClearChatsResponse(w, input.Model)
+			return
+		}
 		WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}

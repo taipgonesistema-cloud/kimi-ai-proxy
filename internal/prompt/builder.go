@@ -16,10 +16,8 @@ func RenderPrompt(messages []utils.Message, tools []utils.Tool) string {
 	if basePrompt := configuredSystemPrompt("KIMI_SYSTEM_PROMPT", "KIMI_SYSTEM_PROMPT_FILE", filepath.Join("prompts", "system.txt")); basePrompt != "" {
 		system = append(system, basePrompt)
 	}
-	if mentionsDarki(messages) {
-		if darkiPrompt := configuredSystemPrompt("KIMI_DARKI_SYSTEM_PROMPT", "KIMI_DARKI_SYSTEM_PROMPT_FILE", filepath.Join("prompts", "darki.txt")); darkiPrompt != "" {
-			system = append(system, darkiPrompt)
-		}
+	if darkiPrompt := configuredSystemPrompt("KIMI_DARKI_SYSTEM_PROMPT", "KIMI_DARKI_SYSTEM_PROMPT_FILE", filepath.Join("prompts", "darki.txt")); darkiPrompt != "" {
+		system = append(system, darkiPrompt)
 	}
 	alreadyHasToolResult := HasToolResult(messages)
 	toolInstructions := FormatToolsAsInstructions(tools, alreadyHasToolResult)
@@ -82,15 +80,6 @@ func configuredSystemPrompt(envKey, fileEnvKey, defaultPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
-}
-
-func mentionsDarki(messages []utils.Message) bool {
-	for _, m := range messages {
-		if strings.Contains(strings.ToLower(utils.ContentToText(m.Content)), "darki") {
-			return true
-		}
-	}
-	return false
 }
 
 func FormatToolsAsInstructions(tools []utils.Tool, alreadyHasToolResult bool) string {
